@@ -1,153 +1,236 @@
 const STORAGE_KEY = "studyflow.tasks.v1";
-const state = { tasks: [], view: "all", search: "", course: "all", sort: "smart" };
-const $ = (selector) => document.querySelector(selector);
 
-const seedTasks = () => {
-  const today = new Date();
-  const date = (days) => {
-    const d = new Date(today); d.setDate(d.getDate() + days);
-    const pad = (n) => String(n).padStart(2, "0");
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  };
-  return [
-    { id: crypto.randomUUID(), title: "Finish Git competency demonstration", course: "CSE 485", type: "Project", date: date(0), time: "20:00", priority: "high", estimate: 120, notes: "Capture branches, focused commits, a pull request, and conflict resolution.", completed: false },
-    { id: crypto.randomUUID(), title: "Write Growing a Competency summary", course: "CSE 485", type: "Assignment", date: date(0), time: "23:59", priority: "high", estimate: 90, notes: "Use the provided template and export the final two-page report as PDF.", completed: false },
-    { id: crypto.randomUUID(), title: "Review Selfmadee sprint tasks", course: "Capstone", type: "Project", date: date(1), time: "18:00", priority: "medium", estimate: 45, notes: "Check owners, blockers, acceptance criteria, and next steps.", completed: false },
-    { id: crypto.randomUUID(), title: "Plan next week’s study blocks", course: "Personal", type: "Study", date: date(3), time: "17:00", priority: "low", estimate: 20, notes: "Reserve realistic blocks around deadlines.", completed: false }
-  ];
+const state = {
+  tasks: [],
+  view: "all",
+  search: "",
+  course: "all",
+  sort: "smart"
 };
 
-function load() {
-  try { state.tasks = JSON.parse(localStorage.getItem(STORAGE_KEY)) || seedTasks(); }
-  catch { state.tasks = seedTasks(); }
-  save();
+function getElement(selector) {
+  return document.querySelector(selector);
 }
-function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks)); }
-function dueAt(task) { return new Date(`${task.date}T${task.time || "23:59"}`); }
-function isSameDay(a,b) { return a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate(); }
-function priorityWeight(p) { return ({high: 3, medium: 2, low: 1})[p] || 0; }
+
+function dateFromToday(numberOfDays) {
+  const date = new Date();
+  date.setDate(date.getDate() + numberOfDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function starterTasks() {
+  return [
+    { id: crypto.randomUUID(), title: "Finish Git competency demonstration", course: "CSE 485", type: "Project", date: dateFromToday(0), time: "20:00", priority: "high", estimate: 120, notes: "Capture branches, commits, a pull request, and conflict resolution.", completed: false },
+    { id: crypto.randomUUID(), title: "Write Growing a Competency summary", course: "CSE 485", type: "Assignment", date: dateFromToday(0), time: "23:59", priority: "high", estimate: 90, notes: "Use the template and export the report as a PDF.", completed: false },
+    { id: crypto.randomUUID(), title: "Review capstone sprint tasks", course: "Capstone", type: "Project", date: dateFromToday(1), time: "18:00", priority: "medium", estimate: 45, notes: "Check owners, blockers, and next steps.", completed: false },
+    { id: crypto.randomUUID(), title: "Plan next week's study blocks", course: "Personal", type: "Study", date: dateFromToday(3), time: "17:00", priority: "low", estimate: 20, notes: "Set aside realistic study time before each deadline.", completed: false }
+  ];
+}
+
+// Tasks are saved in the browser, so they remain after a refresh.
+function saveTasks() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+}
+
+function loadTasks() {
+  try {
+    const savedTasks = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    state.tasks = savedTasks || starterTasks();
+  } catch (error) {
+    state.tasks = starterTasks();
+  }
+  saveTasks();
+}
+
+function dueDate(task) {
+  return new Date(`${task.date}T${task.time || "23:59"}`);
+}
+
+function sameDay(firstDate, secondDate) {
+  return firstDate.getFullYear() === secondDate.getFullYear()
+    && firstDate.getMonth() === secondDate.getMonth()
+    && firstDate.getDate() === secondDate.getDate();
+}
+
+function priorityPoints(priority) {
+  if (priority === "high") return 3;
+  if (priority === "medium") return 2;
+  return 1;
+}
+
+// This score decides which tasks should appear first.
 function smartScore(task) {
-  const hours = (dueAt(task) - new Date()) / 36e5;
-  const urgency = hours < 0 ? 100 : hours < 24 ? 70 : hours < 48 ? 45 : Math.max(0, 25 - hours/24);
-  return urgency + priorityWeight(task.priority) * 14 - Math.min(task.estimate/120, 6);
+  const hoursLeft = (dueDate(task) - new Date()) / 3600000;
+  let urgency = 0;
+  if (hoursLeft < 0) urgency = 100;
+  else if (hoursLeft < 24) urgency = 70;
+  else if (hoursLeft < 48) urgency = 45;
+  else urgency = Math.max(0, 25 - hoursLeft / 24);
+  return urgency + priorityPoints(task.priority) * 14;
 }
-function relativeDue(task) {
-  const due = dueAt(task), now = new Date(), diff = due-now, days = Math.ceil(diff/864e5);
-  const time = due.toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
-  if (diff < 0) return `Overdue · ${due.toLocaleDateString([], {month:"short",day:"numeric"})}`;
-  if (isSameDay(due, now)) return `Today · ${time}`;
-  if (days === 1) return `Tomorrow · ${time}`;
-  return `${due.toLocaleDateString([], {month:"short",day:"numeric"})} · ${time}`;
-}
-function formatMinutes(minutes) { const h=Math.floor(minutes/60), m=minutes%60; return h ? `${h}h${m?` ${m}m`:""}` : `${m}m`; }
-function escapeText(value="") { return value.replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"})[c]); }
 
-function filteredTasks() {
+function dueText(task) {
+  const due = dueDate(task);
   const now = new Date();
-  let tasks = state.tasks.filter(t => {
-    if (state.view === "today" && (!isSameDay(dueAt(t), now) || t.completed)) return false;
-    if (state.view === "overdue" && (dueAt(t) >= now || t.completed)) return false;
-    if (state.view === "upcoming" && (dueAt(t) < now || t.completed)) return false;
-    if (state.view === "completed" && !t.completed) return false;
-    if (state.view === "all" && t.completed) return false;
-    if (state.course !== "all" && t.course !== state.course) return false;
-    return `${t.title} ${t.course} ${t.notes}`.toLowerCase().includes(state.search.toLowerCase());
-  });
-  return tasks.sort((a,b) => {
-    if (state.sort === "due") return dueAt(a)-dueAt(b);
-    if (state.sort === "priority") return priorityWeight(b.priority)-priorityWeight(a.priority);
-    if (state.sort === "course") return a.course.localeCompare(b.course);
-    return smartScore(b)-smartScore(a);
-  });
+  const difference = due - now;
+  const time = due.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (difference < 0) return `Overdue · ${due.toLocaleDateString([], { month: "short", day: "numeric" })}`;
+  if (sameDay(due, now)) return `Today · ${time}`;
+  if (Math.ceil(difference / 86400000) === 1) return `Tomorrow · ${time}`;
+  return `${due.toLocaleDateString([], { month: "short", day: "numeric" })} · ${time}`;
 }
 
-function render() {
+function timeText(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const extraMinutes = minutes % 60;
+  if (hours === 0) return `${extraMinutes}m`;
+  if (extraMinutes === 0) return `${hours}h`;
+  return `${hours}h ${extraMinutes}m`;
+}
+
+function safeText(text = "") {
+  const temporaryDiv = document.createElement("div");
+  temporaryDiv.textContent = text;
+  return temporaryDiv.innerHTML;
+}
+
+function visibleTasks() {
   const now = new Date();
-  const open = state.tasks.filter(t=>!t.completed), complete = state.tasks.filter(t=>t.completed);
-  const progress = state.tasks.length ? Math.round(complete.length/state.tasks.length*100) : 0;
-  $("#dateLabel").textContent = now.toLocaleDateString([], {weekday:"long", month:"long", day:"numeric"}).toUpperCase();
-  $("#greeting").textContent = `${now.getHours()<12?"Good morning":now.getHours()<18?"Good afternoon":"Good evening"}, Japjot`;
-  $("#allCount").textContent = open.length;
-  $("#todayCount").textContent = open.filter(t=>isSameDay(dueAt(t),now)).length;
-  $("#overdueCount").textContent = open.filter(t=>dueAt(t)<now).length;
-  $("#progressValue").textContent = `${progress}%`;
-  $("#progressBar").style.width = `${progress}%`;
-  $("#progressCopy").textContent = `${complete.length} of ${state.tasks.length} tasks completed`;
-  $("#dueSoonValue").textContent = open.filter(t=>{const h=(dueAt(t)-now)/36e5;return h>=0&&h<=48}).length;
-  const minutes = open.reduce((sum,t)=>sum+Number(t.estimate||0),0);
-  $("#timeValue").textContent = formatMinutes(minutes);
-  renderFocus(open);
-  renderCourses();
-  renderTasks(filteredTasks());
+  const tasks = state.tasks.filter(function (task) {
+    if (state.view === "today" && (!sameDay(dueDate(task), now) || task.completed)) return false;
+    if (state.view === "overdue" && (dueDate(task) >= now || task.completed)) return false;
+    if (state.view === "upcoming" && (dueDate(task) < now || task.completed)) return false;
+    if (state.view === "completed" && !task.completed) return false;
+    if (state.view === "all" && task.completed) return false;
+    if (state.course !== "all" && task.course !== state.course) return false;
+    const words = `${task.title} ${task.course} ${task.notes}`.toLowerCase();
+    return words.includes(state.search.toLowerCase());
+  });
+
+  return tasks.sort(function (first, second) {
+    if (state.sort === "due") return dueDate(first) - dueDate(second);
+    if (state.sort === "priority") return priorityPoints(second.priority) - priorityPoints(first.priority);
+    if (state.sort === "course") return first.course.localeCompare(second.course);
+    return smartScore(second) - smartScore(first);
+  });
 }
 
-function renderFocus(open) {
-  const top = [...open].sort((a,b)=>smartScore(b)-smartScore(a)).slice(0,3);
-  $("#focusCards").innerHTML = top.length ? top.map(t=>`<article class="focus-card ${t.priority}" data-edit="${t.id}">
-    <span class="badge ${t.priority}">${t.priority.toUpperCase()}</span>
-    <h3>${escapeText(t.title)}</h3>
-    <p>${escapeText(t.course)} · ${relativeDue(t)} · ${formatMinutes(Number(t.estimate))}</p>
-  </article>`).join("") : `<article class="focus-card"><span class="badge low">CLEAR</span><h3>You’re caught up</h3><p>Add a task when you’re ready to plan what’s next.</p></article>`;
+function renderFocus(openTasks) {
+  const topTasks = [...openTasks].sort((a, b) => smartScore(b) - smartScore(a)).slice(0, 3);
+  if (topTasks.length === 0) {
+    getElement("#focusCards").innerHTML = `<article class="focus-card"><span class="badge low">CLEAR</span><h3>You're caught up</h3><p>Add a task when you are ready.</p></article>`;
+    return;
+  }
+  getElement("#focusCards").innerHTML = topTasks.map((task) => `<article class="focus-card ${task.priority}" data-edit="${task.id}"><span class="badge ${task.priority}">${task.priority.toUpperCase()}</span><h3>${safeText(task.title)}</h3><p>${safeText(task.course)} · ${dueText(task)} · ${timeText(Number(task.estimate))}</p></article>`).join("");
 }
+
 function renderCourses() {
-  const select=$("#courseFilter"), current=state.course;
-  const courses=[...new Set(state.tasks.map(t=>t.course))].sort();
-  select.innerHTML=`<option value="all">All courses</option>`+courses.map(c=>`<option value="${escapeText(c)}">${escapeText(c)}</option>`).join("");
-  select.value = courses.includes(current) ? current : "all";
+  const select = getElement("#courseFilter");
+  const courses = [...new Set(state.tasks.map((task) => task.course))].sort();
+  const options = courses.map((course) => `<option value="${safeText(course)}">${safeText(course)}</option>`).join("");
+  select.innerHTML = `<option value="all">All courses</option>${options}`;
+  select.value = courses.includes(state.course) ? state.course : "all";
 }
-function renderTasks(tasks) {
-  const titles={all:"All tasks",today:"Due today",overdue:"Overdue tasks",upcoming:"Upcoming tasks",completed:"Completed tasks"};
-  $("#viewTitle").textContent=titles[state.view];
-  $("#emptyState").hidden=tasks.length>0;
-  $("#taskList").innerHTML=tasks.map(t=>{
-    const overdue=!t.completed&&dueAt(t)<new Date();
-    return `<article class="task-row ${t.completed?"completed":""}">
-      <button class="check ${t.completed?"checked":""}" data-toggle="${t.id}" aria-label="${t.completed?"Mark incomplete":"Mark complete"}">${t.completed?"✓":""}</button>
-      <div class="task-main"><h3>${escapeText(t.title)}</h3><p><span class="course-dot"></span>${escapeText(t.course)} · ${escapeText(t.type)}</p></div>
-      <span class="badge ${t.priority}">${t.priority}</span>
-      <span class="task-meta due ${overdue?"overdue":""}">${relativeDue(t)}</span>
-      <span class="task-meta">◷ ${formatMinutes(Number(t.estimate))}</span>
-      <button class="edit-button" data-edit="${t.id}" aria-label="Edit ${escapeText(t.title)}">•••</button>
-    </article>`;
+
+function renderTaskList(tasks) {
+  const titles = { all: "All tasks", today: "Due today", overdue: "Overdue tasks", upcoming: "Upcoming tasks", completed: "Completed tasks" };
+  getElement("#viewTitle").textContent = titles[state.view];
+  getElement("#emptyState").hidden = tasks.length > 0;
+  getElement("#taskList").innerHTML = tasks.map(function (task) {
+    const overdue = !task.completed && dueDate(task) < new Date();
+    return `<article class="task-row ${task.completed ? "completed" : ""}"><button class="check ${task.completed ? "checked" : ""}" data-toggle="${task.id}" aria-label="Mark task complete">${task.completed ? "✓" : ""}</button><div class="task-main"><h3>${safeText(task.title)}</h3><p><span class="course-dot"></span>${safeText(task.course)} · ${safeText(task.type)}</p></div><span class="badge ${task.priority}">${task.priority}</span><span class="task-meta due ${overdue ? "overdue" : ""}">${dueText(task)}</span><span class="task-meta">◷ ${timeText(Number(task.estimate))}</span><button class="edit-button" data-edit="${task.id}" aria-label="Edit task">•••</button></article>`;
   }).join("");
 }
 
-function openModal(id=null) {
-  const task=state.tasks.find(t=>t.id===id);
-  $("#taskForm").reset(); $("#taskId").value=task?.id||"";
-  $("#modalTitle").textContent=task?"Edit task":"Add a new task"; $("#deleteTask").hidden=!task;
-  if(task){ $("#taskTitle").value=task.title; $("#taskCourse").value=task.course; $("#taskType").value=task.type; $("#taskDate").value=task.date; $("#taskTime").value=task.time; $("#taskPriority").value=task.priority; $("#taskEstimate").value=task.estimate; $("#taskNotes").value=task.notes||""; }
-  else {
-    const now=new Date(), pad=(n)=>String(n).padStart(2,"0");
-    $("#taskDate").value=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
-    $("#taskTime").value="23:59"; $("#taskEstimate").value=60;
-  }
-  $("#taskModal").showModal(); setTimeout(()=>$("#taskTitle").focus(),0);
+function renderPage() {
+  const now = new Date();
+  const openTasks = state.tasks.filter((task) => !task.completed);
+  const completedTasks = state.tasks.filter((task) => task.completed);
+  const progress = state.tasks.length ? Math.round(completedTasks.length / state.tasks.length * 100) : 0;
+  let greeting = "Good evening";
+  if (now.getHours() < 12) greeting = "Good morning";
+  else if (now.getHours() < 18) greeting = "Good afternoon";
+  getElement("#dateLabel").textContent = now.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" }).toUpperCase();
+  getElement("#greeting").textContent = `${greeting}, Japjot`;
+  getElement("#allCount").textContent = openTasks.length;
+  getElement("#todayCount").textContent = openTasks.filter((task) => sameDay(dueDate(task), now)).length;
+  getElement("#overdueCount").textContent = openTasks.filter((task) => dueDate(task) < now).length;
+  getElement("#progressValue").textContent = `${progress}%`;
+  getElement("#progressBar").style.width = `${progress}%`;
+  getElement("#progressCopy").textContent = `${completedTasks.length} of ${state.tasks.length} tasks completed`;
+  getElement("#dueSoonValue").textContent = openTasks.filter((task) => { const hours = (dueDate(task) - now) / 3600000; return hours >= 0 && hours <= 48; }).length;
+  const minutes = openTasks.reduce((total, task) => total + Number(task.estimate || 0), 0);
+  getElement("#timeValue").textContent = timeText(minutes);
+  renderFocus(openTasks);
+  renderCourses();
+  renderTaskList(visibleTasks());
 }
-function closeModal(){ $("#taskModal").close(); }
-function toast(message){ const el=$("#toast");el.textContent=message;el.classList.add("show");setTimeout(()=>el.classList.remove("show"),2200); }
 
-$("#openTaskModal").addEventListener("click",()=>openModal());
-$("#closeTaskModal").addEventListener("click",closeModal); $("#cancelTask").addEventListener("click",closeModal);
-$("#taskForm").addEventListener("submit",e=>{
-  e.preventDefault(); const id=$("#taskId").value;
-  const task={id:id||crypto.randomUUID(),title:$("#taskTitle").value.trim(),course:$("#taskCourse").value.trim(),type:$("#taskType").value,date:$("#taskDate").value,time:$("#taskTime").value,priority:$("#taskPriority").value,estimate:Number($("#taskEstimate").value),notes:$("#taskNotes").value.trim(),completed:state.tasks.find(t=>t.id===id)?.completed||false};
-  if(id) state.tasks=state.tasks.map(t=>t.id===id?task:t); else state.tasks.push(task);
-  save();closeModal();render();toast(id?"Task updated":"Task added");
+function openTaskForm(taskId = "") {
+  const task = state.tasks.find((item) => item.id === taskId);
+  getElement("#taskForm").reset();
+  getElement("#taskId").value = task ? task.id : "";
+  getElement("#modalTitle").textContent = task ? "Edit task" : "Add a new task";
+  getElement("#deleteTask").hidden = !task;
+  if (task) {
+    ["Title", "Course", "Type", "Date", "Time", "Priority", "Estimate", "Notes"].forEach(function (name) {
+      getElement(`#task${name}`).value = task[name.toLowerCase()] || "";
+    });
+  } else {
+    getElement("#taskDate").value = dateFromToday(0);
+    getElement("#taskTime").value = "23:59";
+    getElement("#taskEstimate").value = 60;
+  }
+  getElement("#taskModal").showModal();
+  getElement("#taskTitle").focus();
+}
+
+function closeTaskForm() { getElement("#taskModal").close(); }
+function showMessage(message) {
+  const toast = getElement("#toast");
+  toast.textContent = message;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), 2200);
+}
+
+getElement("#openTaskModal").addEventListener("click", () => openTaskForm());
+getElement("#closeTaskModal").addEventListener("click", closeTaskForm);
+getElement("#cancelTask").addEventListener("click", closeTaskForm);
+getElement("#taskForm").addEventListener("submit", function (event) {
+  event.preventDefault();
+  const id = getElement("#taskId").value;
+  const oldTask = state.tasks.find((task) => task.id === id);
+  const task = { id: id || crypto.randomUUID(), title: getElement("#taskTitle").value.trim(), course: getElement("#taskCourse").value.trim(), type: getElement("#taskType").value, date: getElement("#taskDate").value, time: getElement("#taskTime").value, priority: getElement("#taskPriority").value, estimate: Number(getElement("#taskEstimate").value), notes: getElement("#taskNotes").value.trim(), completed: oldTask ? oldTask.completed : false };
+  if (id) state.tasks = state.tasks.map((item) => item.id === id ? task : item);
+  else state.tasks.push(task);
+  saveTasks(); closeTaskForm(); renderPage(); showMessage(id ? "Task updated" : "Task added");
 });
-$("#deleteTask").addEventListener("click",()=>{const id=$("#taskId").value;state.tasks=state.tasks.filter(t=>t.id!==id);save();closeModal();render();toast("Task deleted");});
-document.addEventListener("click",e=>{
-  const toggle=e.target.closest("[data-toggle]"); if(toggle){const t=state.tasks.find(x=>x.id===toggle.dataset.toggle);t.completed=!t.completed;save();render();toast(t.completed?"Nice work — task completed":"Task reopened");return;}
-  const edit=e.target.closest("[data-edit]"); if(edit) openModal(edit.dataset.edit);
-  const nav=e.target.closest("[data-view]");
-  if(nav){
-    state.view=nav.dataset.view;
-    document.querySelectorAll(".nav-item").forEach(n=>n.classList.toggle("active",n===nav));
-    render();
-    requestAnimationFrame(()=>document.querySelector(".tasks-panel").scrollIntoView({behavior:"smooth",block:"start"}));
+getElement("#deleteTask").addEventListener("click", function () {
+  const id = getElement("#taskId").value;
+  state.tasks = state.tasks.filter((task) => task.id !== id);
+  saveTasks(); closeTaskForm(); renderPage(); showMessage("Task deleted");
+});
+document.addEventListener("click", function (event) {
+  const checkButton = event.target.closest("[data-toggle]");
+  if (checkButton) {
+    const task = state.tasks.find((item) => item.id === checkButton.dataset.toggle);
+    task.completed = !task.completed; saveTasks(); renderPage(); showMessage(task.completed ? "Task completed" : "Task reopened"); return;
+  }
+  const editButton = event.target.closest("[data-edit]");
+  if (editButton) { openTaskForm(editButton.dataset.edit); return; }
+  const navButton = event.target.closest("[data-view]");
+  if (navButton) {
+    state.view = navButton.dataset.view;
+    document.querySelectorAll(".nav-item").forEach((button) => button.classList.toggle("active", button === navButton));
+    renderPage(); getElement(".tasks-panel").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 });
-$("#searchInput").addEventListener("input",e=>{state.search=e.target.value;render();});
-$("#courseFilter").addEventListener("change",e=>{state.course=e.target.value;render();});
-$("#sortTasks").addEventListener("change",e=>{state.sort=e.target.value;render();});
-load();render();
+getElement("#searchInput").addEventListener("input", (event) => { state.search = event.target.value; renderPage(); });
+getElement("#courseFilter").addEventListener("change", (event) => { state.course = event.target.value; renderPage(); });
+getElement("#sortTasks").addEventListener("change", (event) => { state.sort = event.target.value; renderPage(); });
+
+loadTasks();
+renderPage();
