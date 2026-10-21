@@ -46,6 +46,7 @@ function filteredTasks() {
   const now = new Date();
   let tasks = state.tasks.filter(t => {
     if (state.view === "today" && (!isSameDay(dueAt(t), now) || t.completed)) return false;
+    if (state.view === "overdue" && (dueAt(t) >= now || t.completed)) return false;
     if (state.view === "upcoming" && (dueAt(t) < now || t.completed)) return false;
     if (state.view === "completed" && !t.completed) return false;
     if (state.view === "all" && t.completed) return false;
@@ -68,6 +69,7 @@ function render() {
   $("#greeting").textContent = `${now.getHours()<12?"Good morning":now.getHours()<18?"Good afternoon":"Good evening"}, Japjot`;
   $("#allCount").textContent = open.length;
   $("#todayCount").textContent = open.filter(t=>isSameDay(dueAt(t),now)).length;
+  $("#overdueCount").textContent = open.filter(t=>dueAt(t)<now).length;
   $("#progressValue").textContent = `${progress}%`;
   $("#progressBar").style.width = `${progress}%`;
   $("#progressCopy").textContent = `${complete.length} of ${state.tasks.length} tasks completed`;
@@ -94,7 +96,7 @@ function renderCourses() {
   select.value = courses.includes(current) ? current : "all";
 }
 function renderTasks(tasks) {
-  const titles={all:"All tasks",today:"Due today",upcoming:"Upcoming tasks",completed:"Completed tasks"};
+  const titles={all:"All tasks",today:"Due today",overdue:"Overdue tasks",upcoming:"Upcoming tasks",completed:"Completed tasks"};
   $("#viewTitle").textContent=titles[state.view];
   $("#emptyState").hidden=tasks.length>0;
   $("#taskList").innerHTML=tasks.map(t=>{
