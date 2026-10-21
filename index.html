@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="A focused student planner for assignments, projects, and study sessions." />
+  <title>StudyFlow — Student Task Planner</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="StudyFlow home">
+        <span class="brand-mark">S</span>
+        <span><strong>StudyFlow</strong><small>Student planner</small></span>
+      </a>
+
+      <nav aria-label="Task views">
+        <button class="nav-item active" data-view="all"><span>⌂</span> Dashboard <b id="allCount">0</b></button>
+        <button class="nav-item" data-view="today"><span>☀</span> Today <b id="todayCount">0</b></button>
+        <button class="nav-item" data-view="upcoming"><span>↗</span> Upcoming</button>
+        <button class="nav-item" data-view="completed"><span>✓</span> Completed</button>
+      </nav>
+
+      <div class="sidebar-note">
+        <span>FOCUS TIP</span>
+        <p>Start with one urgent task. Progress beats a perfect plan.</p>
+      </div>
+      <p class="storage-note">Your tasks stay private in this browser.</p>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="dateLabel"></p>
+          <h1 id="greeting">Good morning, Japjot</h1>
+          <p class="subhead">Here’s the clearest path through your workload.</p>
+        </div>
+        <button class="primary" id="openTaskModal">＋ Add task</button>
+      </header>
+
+      <section class="stats" aria-label="Study overview">
+        <article class="stat-card accent">
+          <div><span class="stat-icon">◎</span><small>COURSE PROGRESS</small></div>
+          <strong id="progressValue">0%</strong>
+          <div class="progress-track"><i id="progressBar"></i></div>
+          <p id="progressCopy">Add your first task to begin.</p>
+        </article>
+        <article class="stat-card">
+          <div><span class="stat-icon coral">!</span><small>DUE SOON</small></div>
+          <strong id="dueSoonValue">0</strong>
+          <p>tasks due within 48 hours</p>
+        </article>
+        <article class="stat-card">
+          <div><span class="stat-icon blue">◷</span><small>STUDY TIME LEFT</small></div>
+          <strong id="timeValue">0h</strong>
+          <p>estimated across open tasks</p>
+        </article>
+      </section>
+
+      <section class="focus-panel">
+        <div class="section-heading">
+          <div><p class="eyebrow">SMART PRIORITY</p><h2>Focus next</h2></div>
+          <span class="pill">Based on deadlines + priority</span>
+        </div>
+        <div id="focusCards" class="focus-grid"></div>
+      </section>
+
+      <section class="tasks-panel">
+        <div class="section-heading task-heading">
+          <div><p class="eyebrow">YOUR WORK</p><h2 id="viewTitle">All tasks</h2></div>
+          <div class="task-tools">
+            <label class="search"><span>⌕</span><input id="searchInput" type="search" placeholder="Search tasks" /></label>
+            <select id="courseFilter" aria-label="Filter by course"><option value="all">All courses</option></select>
+            <select id="sortTasks" aria-label="Sort tasks">
+              <option value="smart">Smart order</option>
+              <option value="due">Due date</option>
+              <option value="priority">Priority</option>
+              <option value="course">Course</option>
+            </select>
+          </div>
+        </div>
+        <div id="taskList" class="task-list"></div>
+        <div id="emptyState" class="empty-state" hidden>
+          <span>✓</span><h3>Nothing here</h3><p>Your schedule is clear for this view.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="taskModal">
+    <form id="taskForm" method="dialog">
+      <div class="modal-heading">
+        <div><p class="eyebrow">PLAN YOUR WORK</p><h2 id="modalTitle">Add a new task</h2></div>
+        <button type="button" class="icon-button" id="closeTaskModal" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="taskId" />
+      <label>Task name<input id="taskTitle" required maxlength="90" placeholder="e.g., Draft competency reflection" /></label>
+      <div class="form-grid">
+        <label>Course<input id="taskCourse" required maxlength="35" placeholder="e.g., CSE 485" /></label>
+        <label>Task type<select id="taskType"><option>Assignment</option><option>Project</option><option>Study</option><option>Exam</option><option>Personal</option></select></label>
+        <label>Due date<input id="taskDate" type="date" required /></label>
+        <label>Due time<input id="taskTime" type="time" value="23:59" required /></label>
+        <label>Priority<select id="taskPriority"><option value="high">High</option><option value="medium" selected>Medium</option><option value="low">Low</option></select></label>
+        <label>Estimated minutes<input id="taskEstimate" type="number" min="5" max="1200" step="5" value="60" required /></label>
+      </div>
+      <label>Notes<textarea id="taskNotes" maxlength="280" placeholder="Add the next step, submission details, or a reminder..."></textarea></label>
+      <div class="modal-actions">
+        <button type="button" class="danger" id="deleteTask" hidden>Delete task</button>
+        <span></span>
+        <button type="button" class="secondary" id="cancelTask">Cancel</button>
+        <button type="submit" class="primary">Save task</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
